@@ -499,36 +499,42 @@ function ocv()
 //Set Potentiostat
 function potentiostat(value)
 {
-	if(outputoff) outputon()
 	toArd(":SOUR:FUNC VOLT")
 	toArd(":SOUR:VOLT:MODE FIX")
 	cmpl = value/10
 	toArd(":SENS:CURR:PROT "+toIEEE754(cmpl))
 	toArd(":SOUR:VOLT:LEV " +toIEEE754(value))
+	outputon()
 }
 
 //Set Galvanostat
 function galvanostat(current)
 {
-	if(outputoff) outputon()
 	toArd(":SOUR:FUNC CURR")
 	toArd(":SOUR:CURR:MODE FIX")
 	toArd(":SOUR:CURR:LEV " +toIEEE754(current))
+	outputon()
 }
 
 function toIEEE754(ieeenum) {
 	if (ieeenum < 0 ) toieee_sign = "-"
 	else toieee_sign = "+"
 	ieeenum = Math.abs(ieeenum)
-	for(i=-37; i<37; i++) {
-		if(ieeenum < Math.pow(10,i)) {
-			powoften = i - 1
-			ieeenum /= Math.pow(10,i-1)
-			break;
+	if(ieeenum != 0) {
+		for(i=-37; i<37; i++) {
+			if(ieeenum < Math.pow(10,i)) {
+				powoften = i - 1
+				ieeenum /= Math.pow(10,i-1)
+				break;
+			}
 		}
+	}
+	else {
+		powoften = 0
 	}
 	return(toieee_sign + ieeenum.toString() + "E" + powoften.toString())
 }
+
 
 //Break Arduino string into useful object
 function data_parse(data)
