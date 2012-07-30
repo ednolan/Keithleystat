@@ -5,11 +5,6 @@ cd ./Software
 PATH=$PATH:/usr/local/bin/ #Fix Platypus-related bug with incorrect PATH
 username=`whoami`
 
-#Create directory for calibration files if it doesn't already exist
-if [[ ! -d "../../../../Ardustat Calibration" ]]; then
-	mkdir ../../../../Ardustat\ Calibration
-fi
-
 #Start mongodb daemon if it's not running
 daemonisrunning=`ps -aAc | grep mongod | wc -l | sed -e 's/^[ \t]*//'`
 if [[ $daemonisrunning == "0" ]]; then
@@ -23,11 +18,11 @@ if [[ $daemonisrunning == "0" ]]; then
 fi
 
 #Detect arduino device files
-arduinos=`ls /dev/tty.* | grep -e usbmodem -e usbserial`
-numofarduinos=`ls /dev/tty.* | grep -e usbmodem -e usbserial | wc -l | sed -e 's/^[ \t]*//'`  #Number of results returned
+arduinos=`ls /dev/tty.* | grep PL2303`
+numofarduinos=`ls /dev/tty.* | grep PL2303 | wc -l | sed -e 's/^[ \t]*//'`  #Number of results returned
 
 if [[ $arduinos == "" ]]; then
-	echo No arduinos found
+	echo No Keithleys found
 	exit
 fi
 
@@ -36,7 +31,7 @@ if [[ $numofarduinos == "1" ]]; then
 	../node expressserver.js $arduinos $1 $2 $3
 	exit
 fi
-echo You appear to have multiple arduinos connected. Please select one:
+echo You appear to have multiple Keithleys connected. Please select one:
 select fname in $arduinos;
 do
 	../node expressserver.js $fname $1 $2 $3

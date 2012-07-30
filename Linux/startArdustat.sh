@@ -26,11 +26,11 @@ if [[ $daemonisrunning == "0" ]]; then
 	mongod --quiet &
 fi
 
-#Detect arduino device files
-arduinos=`ls -d /dev/* | grep -e ttyUSB -e ttyACM` 				#anything of the form /dev/ttyACM* or /dev/ttyUSB*
-numofarduinos=`ls -d /dev/* | grep -e ttyUSB -e ttyACM | wc -l` #number of results returned
+#Detect keithley device file
+arduinos=`ls -d /dev/* | grep ttyUSB` 				#anything of the form /dev/ttyACM* or /dev/ttyUSB*
+numofarduinos=`ls -d /dev/* | grep ttyUSB | wc -l` #number of results returned
 if [[ $arduinos == "" ]]; then
-	echo No arduinos found
+	echo No Keithleys found
 	exit
 fi
 
@@ -39,7 +39,7 @@ if [[ $numofarduinos == "1" ]]; then
 	node expressserver.js $arduinos $1 $2 $3
 	exit
 fi
-echo You appear to have multiple arduinos connected. Please select one:
+echo You appear to have multiple Keithleys connected. Please select one:
 select fname in $arduinos;
 do
 	node expressserver.js $fname $1 $2 $3

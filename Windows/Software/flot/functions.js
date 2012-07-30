@@ -43,6 +43,7 @@ var socket = io.connect('/');
 //Socket Stuff
 socket.on('new_data', function (data) {
 	fata = data.ardudata
+	console.log(fata)
 	
 	debug_info = ""
 	for (var key in fata) { //generate values for debug
@@ -61,7 +62,6 @@ socket.on('new_data', function (data) {
 	
 	while (big_arr.length > 100) big_arr.shift(0)
 	plot_all(big_arr)
-	plot_all_debug(big_arr)
 });
 
 
@@ -112,17 +112,7 @@ $("#send").click(function() {
 			$("#status").html("all good").fadeIn().fadeOut()
 		}
 	});	
-});
-
-$("#directcmd_value").live('input', function () {
-	if($(this).val().length == 5) {
-		$("#send_directcmd").removeAttr("disabled")
-	}
-	else {
-		$("#send_directcmd").attr("disabled","true")
-	}
-});
-		
+});		
 
 $("#send_directcmd").click(function(){
 	$.ajax({
@@ -131,59 +121,6 @@ $("#send_directcmd").click(function(){
 		async: true,
 		url: '/senddata',
 		data: {directcmd:$("#directcmd_value").val()},
-		success: function(stuff){
-			console.log(stuff);
-		}
-	});
-});
-
-$("#send_calibrate").click(function(){
-	$.ajax({
-		type: 'POST',
-		dataType: "json",
-		async: true,
-		url: '/senddata',
-		data: {command:"calibrate",value:$("#calibrate_r_fixed").val()},
-		success: function(stuff){
-			console.log(stuff);
-		}
-	});
-			
-});
-
-$("#set_id").click(function() {
-	$.ajax({
-		type: 'POST',
-		dataType: "json",
-		async: true,
-		url: '/senddata',
-		data: {command:"idset",value:$("#idset_value").val()},
-		success: function(stuff) {
-			console.log(stuff);
-		}
-	});
-});
-
-$("#find_error").click(function() {
-	$.ajax({
-		type: 'POST',
-		dataType: "json",
-		async: true,
-		url: '/senddata',
-		data: {command:"find_error",value:$("#input_current").val()},
-		success: function(stuff){
-			console.log(stuff);
-		}
-	});		
-});
-
-$("#blink").click(function() {
-	$.ajax({
-		type: 'POST',
-		dataType: "json",
-		async: true,
-		url: '/senddata',
-		data: {command:"blink",value:""},
 		success: function(stuff){
 			console.log(stuff);
 		}
@@ -254,60 +191,6 @@ $("#startcv").click(function(){
 		}
 	});	
 });
-
-$("#check_firmware").click(function() {
-	$.ajax({
-		type: 'POST',
-		dataType: "json",
-		async: true,
-		url: '/senddata',
-		data: {command:"check_firmware",value:""},
-		success: function(stuff){
-			$("#check_firmware_result").html(stuff["firmwareresult"])
-		}
-	});		
-});
-
-$("#upload_firmware").click(function() {
-	$.ajax({
-		type: 'POST',
-		dataType: "json",
-		async: true,
-		url: '/senddata',
-		data: {command:"upload_firmware",value:""},
-		success: function(stuff){
-			$("#status").html("Firmware uploaded").fadeIn().fadeOut()
-		}
-	});		
-});
-
-$("#send_customres").click(function(){
-	$.ajax({
-		type: 'POST',
-		dataType: "json",
-		async: true,
-		url: '/senddata',
-		data: {command:"customres",value:$("#customres_value").val()},
-		success: function(stuff){
-			console.log(stuff);
-		}
-	});
-			
-});
-
-$("#send_customres_clear").click(function(){
-	$.ajax({
-		type: 'POST',
-		dataType: "json",
-		async: true,
-		url: '/senddata',
-		data: {command:"customres_clear",value:""},
-		success: function(stuff){
-			console.log(stuff);
-		}
-	});
-			
-})
 
 //Called whenever the user changes a 'potentiostat/galvanostat'
 //dropdown. Changes the rest of the fields so that they match
@@ -528,8 +411,8 @@ function cvprocess(data) {
 		hold_array['x'] = []
 		hold_array['y'] = []
 	 }
-	hold_array['x'].push(foo['working_potential'])
-	hold_array['y'].push(foo['current'])
+	hold_array['x'].push(foo['VOLT'])
+	hold_array['y'].push(foo['CURR'])
 }
 
 function grabData(dict) {
@@ -612,12 +495,12 @@ function plot_all(data) {
 	if ($("#flot_potential").length >0) {
 //			console.log($("#flot_potential").length )
 		flotfoo = []   
-		flotfoo.push({'data':flotformat(foo,'time','working_potential'),'label':'working_potential','color':'red'});
+		flotfoo.push({'data':flotformat(foo,'time','VOLT'),'label':'Voltage','color':'red'});
 		$.plot($("#flot_potential"), flotfoo,options);
 	}
 	if ($("#flot_current").length > 0) {
 		flotfoo = []   
-		flotfoo.push({'data':flotformat(foo,'time','current'),'label':'Current','color':'red'});
+		flotfoo.push({'data':flotformat(foo,'time','CURR'),'label':'Current','color':'red'});
 		$.plot($("#flot_current"), flotfoo,options);
 	}
 }
@@ -627,24 +510,12 @@ function plot_all_viewer(data) {
 	if ($("#flot_potential_viewer").length >0) {
 //			console.log($("#flot_potential").length )
 		flotfoo = []   
-		flotfoo.push({'data':flotformat(foo,'time','working_potential'),'label':'working_potential','color':'red'});
+		flotfoo.push({'data':flotformat(foo,'time','VOLT'),'label':'Voltage','color':'red'});
 		$.plot($("#flot_potential_viewer"), flotfoo,options_viewer);
 	}
 	if ($("#flot_current_viewer").length > 0) {
 		flotfoo = []   
-		flotfoo.push({'data':flotformat(foo,'time','current'),'label':'Current','color':'red'});
+		flotfoo.push({'data':flotformat(foo,'time','CURR'),'label':'Current','color':'red'});
 		$.plot($("#flot_current_viewer"), flotfoo,options_viewer);
 	}
-}
-
-function plot_all_debug(data) {
-	foo = data;
-	flotfoo = []
-	flotfoo.push({'data':flotformat(foo,'time','cell_adc'),'label':'cell_adc'});
-	flotfoo.push({'data':flotformat(foo,'time','dac_adc'),'label':'dac_adc'});
-	flotfoo.push({'data':flotformat(foo,'time','dac_set'),'label':'dac_set'});
-	flotfoo.push({'data':flotformat(foo,'time','res_set'),'label':'res_set'});
-	flotfoo.push({'data':flotformat(foo,'time','gnd_adc'),'label':'gnd_adc'});
-	
-	$.plot($("#debuggraph"), flotfoo,options);
 }
