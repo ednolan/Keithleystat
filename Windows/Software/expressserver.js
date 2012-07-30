@@ -20,6 +20,8 @@ var express = require('express'), //App Framework (similar to web.py abstraction
 io = require('socket.io').listen(app); //Socket Creations
 io.set('log level', 1)
 
+outputoff = true;
+
 if (process.argv.length == 2) {
 	//no serial port in command line
 	console.log("Please enter the serial port via the command line")
@@ -31,9 +33,9 @@ else {
 
 if (process.argv.length <= 3) tcpport = 8888
 else tcpport = process.argv[3] //port of the HTTP server
-if (process.argv.length <= 4) s000_sample_rate = 150 //delay in milliseconds between requests to the arduino for data
+if (process.argv.length <= 4) s000_sample_rate = 170 //delay in milliseconds between requests to the arduino for data
 else s000_sample_rate = process.argv[4]
-if (process.argv.length <= 5) queue_write_rate = 50 //delay in milliseconds between command writes to the arduino
+if (process.argv.length <= 5) queue_write_rate = 30 //delay in milliseconds between command writes to the arduino
 else queue_write_rate = process.argv[5]
 
 resistance=587.6
@@ -171,31 +173,23 @@ function setStuff(req,res)
 	{	
 		collectiontoexport = req.body.exportcsv
 		console.log("Exporting database", collectiontoexport, "to CSV")
-		mongoexportcmd = "mongoexport -csv -o ../CSVfiles/" + collectiontoexport + ".csv -d ardustat -c " + collectiontoexport + " -f time,cell_potential,working_potential,current"
+		mongoexportcmd = "mongoexport -csv -o ../CSVfiles/" + collectiontoexport + ".csv -d ardustat -c " + collectiontoexport + " -f time,VOLT,CURR"
 		exec(mongoexportcmd, log_stdout)
 	}
 	var holdup = false
 	//If abstracted command (potentiostat,cv, etc)
 	if (req.body.command != undefined)
 	{
-		calibrate = false
 		cv = false
 		arb_cycling = false
 		
 		command = req.body.command;
 		value = req.body.value;
-		if (command == "calibrate")
-		{
-			console.log("Starting calibration");
-			calibrator(req.body.value);
-		}
-		
 		if (command == "ocv")
 		{
 			console.log("Setting OCV");
 			ocv()
 		}
-		
 		if (command == "potentiostat")
 		{
 			console.log("Setting potentiostat");
@@ -206,20 +200,10 @@ function setStuff(req,res)
 			console.log("Setting galvanostat");
 			galvanostat(value)
 		}
-		if (command == "moveground")
-		{
-			console.log("Setting ground");
-			moveground(value)
-		}
 		if (command == "cv")
 		{
 			console.log("Setting cv");
 			cv_start_go(value)
-		}
-		if (command == "find_error")
-		{
-			console.log("Finding error");
-			find_error(value)
 		}
 		if (command == "cycling")
 		{
@@ -234,27 +218,6 @@ function setStuff(req,res)
 		if (command == "idset") {
 			console.log("Setting ID");
 			set_id(value);
-		}
-		if (command == "blink") {
-			console.log("Blinking")
-			blink();
-		}
-		if (command == "upload_firmware") {
-			console.log("Uploading firmware")
-			upload_firmware();
-		}
-		if (command == "check_firmware") {
-			console.log("Checking firmware")
-			holdup = true
-			check_firmware(req,res)
-		}
-		if (command == "customres") {
-			console.log("Set custom resistance to:",value)
-			customres = parseFloat(value);
-		}
-		if (command == "customres_clear") {
-			console.log("Cleared custom resistance")
-			customres = null
 		}
 	}
 	
@@ -515,309 +478,68 @@ function cvprocess(data)
 		
 	 }
 
-	hold_array['x'].push(foo['working_potential'])
-	hold_array['y'].push(foo['current'])
+	hold_array['x'].push(foo['VOLT'])
+	hold_array['y'].push(foo['CURR'])
 
 	return cv_process_out
+}
+
+function outputon() {
+	toArd(":OUTP ON")
+	outputoff = false;
 }
 
 //Set to OCV
 function ocv()
 {
-	toArd("-",0000)
-	console.log("Set OCV")
+	toArd(":OUTP OFF")
+	outputoff = true;
 }
 
 //Set Potentiostat
 function potentiostat(value)
 {
-	value_to_ardustat = value / volts_per_tick;
-	toArd("p",value_to_ardustat)
-	console.log("Set potentiostat to",value)
-}
-
-//Allow negative values
-function moveground(value)
-{
-	value_to_ardustat = value / volts_per_tick;
-	toArd("d",value_to_ardustat)
-	console.log("Moved ground to",value)
-	ocv()
+	if(outputoff) outputon()
+	toArd(":SOUR:FUNC VOLT")
+	toArd(":SOUR:VOLT:MODE FIX")
+	cmpl = value/10
+	toArd(":SENS:CURR:PROT "+toIEEE754(cmpl))
+	toArd(":SOUR:VOLT:LEV " +toIEEE754(value))
 }
 
 //Set Galvanostat
 function galvanostat(current)
 {
-	if (Math.abs(current) >= current_threshold) {
-		if(high_current == false) console.log("Switching to high current mode")
-		high_current = true
-		galvanostat_highcurrent(current)
+	if(outputoff) outputon()
+	toArd(":SOUR:FUNC CURR")
+	toArd(":SOUR:CURR:MODE FIX")
+	toArd(":SOUR:CURR:LEV " +toIEEE754(current))
+}
+
+function toIEEE754(ieeenum) {
+	if (ieeenum < 0 ) toieee_sign = "-"
+	else toieee_sign = "+"
+	ieeenum = Math.abs(ieeenum)
+	for(i=-37; i<37; i++) {
+		if(ieeenum < Math.pow(10,i)) {
+			powoften = i - 1
+			ieeenum /= Math.pow(10,i-1)
+			break;
+		}
 	}
-	else {
-		if(high_current) console.log("Switching to low current mode")
-		high_current = false
-		galvanostat_lowcurrent(current)
-	}
-	console.log("Set galvanostat to",current)
+	return(toieee_sign + ieeenum.toString() + "E" + powoften.toString())
 }
-
-function galvanostat_highcurrent(current) {
-	if(customres == null) {
-		delta_potential = (current/coefficient)*resistance
-	}
-	else {
-		delta_potential = (current/coefficient)*customres
-	}
-	value_to_ardustat = delta_potential / volts_per_tick;
-	toArd("r",parseInt(0))
-	toArd("H",parseInt(value_to_ardustat))
-}
-
-function galvanostat_lowcurrent(current) {
-		//First Match R
-		r_guess = .1/Math.abs(current)
-		//console.log(r_guess)
-		target = 1000000
-		r_best = 0
-		set_best = 0
-		for (var key in res_table)
-		{
-			if (Math.abs(r_guess-res_table[key]) < target)
-			{
-				target = Math.abs(r_guess-res_table[key]) 
-				r_best = res_table[key]
-				set_best = key
-			}
-		}
-		if(customres == null) {
-			delta_potential = current*r_best
-		}
-		else {
-			delta_potential = current*customres
-		}
-		value_to_ardustat = delta_potential / volts_per_tick;
-	
-		toArd("r",parseInt(set_best))
-		toArd("g",parseInt(value_to_ardustat))
-}
-
-function find_error(value)
-{
-	error=value
-}
-
-function set_id(value) {
-	toArd("V",parseInt(value));
-	console.log("Set ID to",value)
-}
-
-function blink() {
-	toArd(" ",0000)
-}
-
-function upload_firmware() {
-	serialPort.close()
-	exec("cd ./avrdude && avrdude -F -V -c arduino -p ATMEGA328P -P " + process.argv[2] + " -b 115200 -U flash:w:firmware_12s.hex && cd ..", 
-	     function(error, stdout, stderr) {serialPort = connectToSerial()})
-}
-
-function check_firmware(req, res) {
-	serialPort.close()
-	check_firmware_request = req
-	check_firmware_response = res
-	exec("node ./detectIfFirmwareLoaded.js "+process.argv[2], function(error, stdout, stderr) {
-		serialPort = connectToSerial()
-		if(stdout == "firmware\n") {
-			console.log("Firmware is installed on "+process.argv[2])
-			check_firmware_request.body.firmwareresult = "Firmware is installed"
-		}
-		else {
-			console.log("Firmware does not appear to be installed on "+process.argv[2])
-			check_firmware_request.body.firmwareresult = "Firmware does not appear to be installed"
-		}
-		check_firmware_response.send(check_firmware_request.body)
-	})
-}
-
-//Global Functions for Data Parsing
-id = 20035;
-vpt = undefined; //volts per tick
-mode = 0;
-var res_table;
-customres = null;
 
 //Break Arduino string into useful object
 function data_parse(data)
 {
 	parts = data.split(",")
   	out = {}
-
-	//the raw data
-	//console.log(data)
-	out['dac_set'] = parseFloat(parts[1])
-	out['cell_adc'] = parseFloat(parts[2])
-	out['dac_adc'] = parseFloat(parts[3])
-	out['res_set'] = parseFloat(parts[4])
-	out['mode'] = parseInt(parts[6])
-	out['gnd_adc'] = parseFloat(parts[8])
-	out['ref_adc'] = parseFloat(parts[9])
-	out['twopointfive_adc'] = parseFloat(parts[10])
-	out['currentpin'] = parseFloat(parts[11])
-	out['id'] = parseInt(parts[12])
-	out['last_comm'] = last_comm
-	//making sense of it
-	volts_per_tick = 	5/1024
-	if (vpt == undefined) vptt = volts_per_tick;
-	if (id != out['id'])
-	{
-		id = out['id'];
-		res_table = undefined
-	}
-    
-	//force ocv when dac_set and dac_adc don't match up
-    if (out['mode'] != 1 & out['dac_set'] - out['dac_adc'] > 900)
-    {
-		console.log("DAC setting and measurement differ by over 4.4V, setting OCV")
-        ocv();
-    }
-
-	
-	if (mode != out['mode'])
-	{
-		mode = out['mode'];
-	}
-	out['cell_potential'] = (out['cell_adc'] - out['gnd_adc']) * volts_per_tick
-	out['dac_potential'] = (out['dac_adc'] - out['gnd_adc'])*volts_per_tick
-	out['ref_potential'] = out['ref_adc']*volts_per_tick
-	out['gnd_potential'] = out['gnd_adc']*volts_per_tick
-	out['working_potential'] = (out['cell_adc'] - out['ref_adc']) * volts_per_tick
-	last_potential = out['working_potential']
-	
-	out['Current_pin'] = (((out['currentpin']-out['gnd_adc'])*volts_per_tick)/resistance)*coefficient*-1
-	out['Current Pin Resistance']=resistance
-	out['Error']=((error-out['Current_pin'])/error)*100
-	
-	
-	
-	if (res_table == undefined)
-	{
-		try
-		{
-			res_table = JSON.parse(fs.readFileSync("unit_"+id.toString()+".json").toString())
-			console.log("Loaded calibration table for ID#"+id.toString())
-			
-			
-		}
-		catch (err)
-		{
-			//console.log(err)
-			console.log("Warning: Couldn't find calibration table for ID#"+id.toString())
-			res_table = "null"
-		}
-	}
-	
-	if (res_table.constructor.toString().indexOf("Object")>-1)
-	{
-		if (customres == null) {
-			out['resistance'] = res_table[out['res_set']]
-		}
-		else {
-			out['resistance'] = customres
-		}
-		current = (out['dac_potential']-out['cell_potential'])/out['resistance']
-		if (mode == 1) out['current'] = 0
-		else if (high_current) out['current'] = out['Current_pin']
-		else out['current'] = current
-	}
-	
+	out['VOLT'] = parseIEEE754(parts[0])
+	out['CURR'] = parseIEEE754(parts[1])
+	out['RES'] = parseIEEE754(parts[2])
+	out['TIME'] = parseIEEE754(parts[3])
 	return out
-}
-
-
-
-//CALIBRATION PORTION
-//What happens
-//1) We intitialize a counter, a loop counter,a loop limit and a callibration array
-//2) When the function is called we flip the boolean and scan 
-calibrate = false
-counter = 0
-calloop = 0
-callimit = 2
-calibration_array = []
-rfixed = 10000
-
-
-function calibrator(value)
-{
-	try {
-		fs.unlinkSync("unit_"+id.toString()+".json")
-		console.log("Deleted old calibration table")
-	}
-	catch (err) {
-		console.log("Calibrating for first time")
-	}
-		
-	res_table = "null"
-	rfixed = parseFloat(value)
-	//console.log(rfixed)
-	calibrate = false
-	counter = 0
-	calloop = 0
-	queuer.push("R0255")
-	setTimeout(function(){calibrate = true},100)
-}
-
-function calibrate_step()
-{
-		counter++;
-		if (counter > 255)
-		{
-			counter = 0	
-			calloop++
-			if (calloop > callimit)
-			{
-				calibrate = false
-				out_table = {}
-				for (i = 0; i < calibration_array.length; i++)
-				{
-					this_foo = calibration_array[i]
-					res_set = this_foo['res_set']
-					dac_potential = this_foo['dac_potential']
-					cell_potential = this_foo['cell_potential']
-					gnd_potential = this_foo['gnd_potential']
-					res_value = rfixed*(((dac_potential-gnd_potential)/(cell_potential-gnd_potential)) - 1)					
-					if (res_value > 0) { //band-aid fix for bug where we were getting negative resistances
-						if (out_table[res_set] == undefined) out_table[res_set] = []
-						out_table[res_set].push(res_value)
-						console.log("Pot step:",res_set,"Resistance value:",res_value)
-					}
-					else {
-						console.log("Got negative resistance:",res_value,"for pot step",res_set)
-					}
-				}
-				//console.log(out_table)
-				final_table = {}
-				for (var key in out_table)
-				{
-					if (out_table.hasOwnProperty(key)) 
-					{
-						arr = out_table[key]
-						sum = 0
-						for (var i = 0; i < arr.length; i ++)
-						{
-							sum = sum + arr[i]
-						}
-						average = sum/(arr.length)
-						final_table[key] = average
-					}
-				  
-				}
-				//console.log(final_table)
-				fs.writeFileSync("unit_"+id.toString()+".json",JSON.stringify(final_table))
-				res_table = undefined;
-			}
-		} 
-		setTimeout(function(){toArd("r",counter)},50);
 }
 
 //************************
@@ -834,39 +556,35 @@ function connectToSerial() {
 		stopBits: 1,
 		flowControl: false
 	});
+	serialPort.write("*RST\r")
+	serialPort.write(":OUTP ON\r")
+	outputoff = false;
+	serialPort.write(":SENS:FUNC:ON \"CURR:DC\"\r")
+	serialPort.write(":SENS:FUNC:ON \"VOLT:DC\"\r")
 	serialPort.on("data", dataParser);
 	return serialPort
 }
 
 dataGetter = setInterval(function(){
-	queuer.push("s0000");
-	if (calibrate) calibrate_step()
-	if (cv) cv_stepper()
-	if (arb_cycling) cycling_stepper()
-
+	if(outputoff == false) {
+		queuer.push(":READ?\r");
+		if (cv) cv_stepper()
+		if (arb_cycling) cycling_stepper()
+	}
 },s000_sample_rate)
 
 commandWriter = setInterval(function(){
 	if (queuer.length > 0)
 	{
 		sout = queuer.shift();
-		//if (sout != "s0000") console.log(sout);
-		if(sout.length != 5) {
-			console.log("Not sending invalid command '"+sout+"'")
+		try {
+			serialPort.write(sout);	
 		}
-		else {
-			try {
-				serialPort.write(sout);	
-			}
-			catch(err) {
-				if(sout != "s0000") {
-					console.log("Failed to send",sout,"to serial port.")
-				}
-			}
+		catch(err) {
+			console.log("Failed to send",sout,"to serial port.")
 		}
 	}
 },queue_write_rate)
-
 
 //toArd: functionally equivalent to queuer.push(command), but slightly
 //fancier, since it prints the command and records it as the last command
@@ -885,9 +603,6 @@ biglogger = 0
 
 //GotData: Called from dataParser every time a new line of data is received
 function gotData(data) {
-	//console.log(data)
-	if (data.search("GO")>-1)
-	{
 		foo = data_parse(data);
 		d = new Date().getTime()	
 		foo['time'] = d
@@ -934,40 +649,22 @@ function gotData(data) {
 		foo['datafile'] = datafile
 		io.sockets.emit('new_data',{'ardudata':foo} )
 		app.set('ardudata',foo)
-	}
-		
 }
 
 //dataParser: parses raw serial data chunks from ardustat into individual lines
 var line = ""
 function dataParser(rawdata) {
 	data = rawdata.toString();
-	if (data.search("\n") > -1)
+	if (data.search("\r") > -1)
 	{
-		line = line + data.substring(0,data.indexOf('\n'));
+		line = line + data.substring(0,data.indexOf('\r'));
 		gotData(line);
-		line = data.substring(data.indexOf('\n')+1,data.length);
+		line = data.substring(data.indexOf('\r')+1,data.length);
 	}
 	else
 	{
 		line = line + data;
 	}		
-}
-
-//ardupadder: cleans up commands before they're sent to the ardustat
-//e.g. g10 -> g0010
-function ardupadder(command,number)
-{
-	number = parseInt(number)
-	if (number < 0) number=Math.abs(number)+2000
-	//console.log(number)
-	padding = "";
-	if (number < 10) padding = "000";
-	else if (number < 100) padding= "00";
-	else if (number < 1000) padding= "0";
-	ard_out = command+padding+number.toString()
-	return ard_out
-	
 }
 
 //****************
